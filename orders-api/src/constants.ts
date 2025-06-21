@@ -1,5 +1,4 @@
-export const AUTH_PUBLIC_KEY = 'AUTH_PUBLIC_KEY';
-export const AUTH_PRIVATE_KEY = 'AUTH_PRIVATE_KEY';
+export const JWT_AUTH_KEY = 'JWT_AUTH_KEY';
 
 export const MAILGUN_API_KEY = 'MAILGUN_API_KEY';
 export const MAILGUN_DOMAIN = 'MAILGUN_DOMAIN';

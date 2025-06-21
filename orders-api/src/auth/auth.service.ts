@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Algorithm } from 'jsonwebtoken';
-import { AUTH_PRIVATE_KEY } from 'src/constants';
+import { JWT_AUTH_KEY } from 'src/constants';
 
 /**
  * Default expires in 1 week
@@ -16,16 +16,16 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  createAccessToken(id: string): string {
-    const key = this.configService.get(AUTH_PRIVATE_KEY) ?? '';
-    const algo = 'RS256' as Algorithm;
+  createAccessToken(id: number): string {
+    const key = this.configService.get(JWT_AUTH_KEY) ?? '';
+    const algo = 'HS256' as Algorithm;
     const options = {
       algorithm: algo,
       secret: key,
       expiresIn: DEFAULT_EXPIRES_IN,
     };
 
-    const payload = { sub: id };
+    const payload = { sub: id.toString() };
     return this.jwtService.sign(payload, options);
   }
 }
