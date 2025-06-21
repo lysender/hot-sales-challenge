@@ -1,0 +1,8 @@
+export const AUTH_PUBLIC_KEY = 'AUTH_PUBLIC_KEY';
+export const AUTH_PRIVATE_KEY = 'AUTH_PRIVATE_KEY';
+
+export const MAILGUN_API_KEY = 'MAILGUN_API_KEY';
+export const MAILGUN_DOMAIN = 'MAILGUN_DOMAIN';
+export const MAILGUN_SENDER = 'MAILGUN_SENDER';
+
+export const LANDING_URL = 'LANDING_URL';
