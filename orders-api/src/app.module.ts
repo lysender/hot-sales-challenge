@@ -5,8 +5,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { InventoryModule } from './inventory/inventory.module';
-import { PromotionsModule } from './promotions/promotions.module';
 import { OrdersModule } from './orders/orders.module';
+import { PromotionsModule } from './promotions/promotions.module';
 
 @Module({
   imports: [

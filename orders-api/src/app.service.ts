@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
+import { ServiceNameDto } from './shared/service-name.dto';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  getServiceName(): ServiceNameDto {
+    return {
+      name: 'orders-service',
+      version: '0.1.0',
+    };
   }
 }

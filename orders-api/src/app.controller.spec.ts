@@ -15,8 +15,10 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return service name', () => {
+      const result = appController.getServiceName();
+      expect(result.name).toEqual('orders-service');
+      expect(result.version).toEqual('0.1.0');
     });
   });
 });
