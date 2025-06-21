@@ -16,3 +16,11 @@ charset = utf-8
 [src/**.{js,ts}]
 indent_style = space
 indent_size = 2
+
+[migrations/**.{js,ts}]
+indent_style = space
+indent_size = 2
+
+[test/**.{js,ts}]
+indent_style = space
+indent_size = 2

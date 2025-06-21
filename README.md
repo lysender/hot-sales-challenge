@@ -20,7 +20,7 @@ Product:
 - name
 
 Inventory:
-- id -> Item.id
+- id -> Product.id
 - quantity
 
 Promotion:
