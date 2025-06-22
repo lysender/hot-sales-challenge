@@ -67,7 +67,7 @@ func placeOrdersSimple(config *AppConfig) {
 
 	var wg sync.WaitGroup
 
-	for i := range 10 {
+	for i := range 100 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
