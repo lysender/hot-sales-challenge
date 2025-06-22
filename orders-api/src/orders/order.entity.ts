@@ -13,12 +13,14 @@ export class Order {
   id: string;
 
   @Column()
+  @Index()
   customerId: number;
 
   @Column()
   promotionId: string;
 
   @Column()
+  @Index()
   productId: string;
 
   @Column()
