@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -64,9 +65,17 @@ func loadConfig() AppConfig {
 func placeOrdersSimple(config *AppConfig) {
 	start := time.Now()
 
+	var wg sync.WaitGroup
+
 	for i := range 10 {
-		placeOrderSimple(config, i+10000)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			placeOrderSimple(config, i+10000)
+		}()
 	}
+
+	wg.Wait()
 
 	elapsed := time.Since(start)
 	printElapsed(elapsed)
