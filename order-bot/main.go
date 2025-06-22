@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -71,12 +72,16 @@ func (c *CrawlResults) Add(status int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	_, ok := c.Statuses[status]
+	val, ok := c.Statuses[status]
 	if !ok {
 		c.Statuses[status] = 1
 	} else {
-		c.Statuses[status] += 1
+		c.Statuses[status] = val + 1
 	}
+}
+
+func randomInt(min int, max int) int {
+	return min + rand.Intn(max-min)
 }
 
 func placeOrdersSimple(config *AppConfig) {
@@ -88,13 +93,25 @@ func placeOrdersSimple(config *AppConfig) {
 
 	var wg sync.WaitGroup
 
-	for i := range 100 {
+	// Simple inserts
+	for i := range 10 {
 		wg.Add(1)
-		go func() {
+
+		// A regular entry
+		go func(x int) {
 			defer wg.Done()
-			status := placeOrderSimple(config, i+10000)
+			status := placeOrderSimple(config, x+10000)
 			result.Add(status)
-		}()
+		}(i)
+
+		// Chaotic entry
+		// wg.Add(1)
+		// go func() {
+		// 	defer wg.Done()
+		// 	id := randomInt(10000, 10100)
+		// 	status := placeOrderSimple(config, id)
+		// 	result.Add(status)
+		// }()
 	}
 
 	wg.Wait()
@@ -103,7 +120,7 @@ func placeOrdersSimple(config *AppConfig) {
 	printElapsed(elapsed)
 
 	for k, v := range result.Statuses {
-		fmt.Printf("Status: %d, count: %d", k, v)
+		fmt.Printf("Status: %d, count: %d\n", k, v)
 	}
 }
 
@@ -116,6 +133,7 @@ func printElapsed(elapsed time.Duration) {
 }
 
 func placeOrderSimple(config *AppConfig, customerId int) int {
+	fmt.Println("Sending POST request for", customerId)
 	token := generateToken(config, customerId)
 
 	endpoint := config.ApiUrl + "/orders/placeOrderSimple"
@@ -125,11 +143,14 @@ func placeOrderSimple(config *AppConfig, customerId int) int {
 		"productId":   config.ProductId,
 	}
 	payload, err := json.Marshal(data)
+	fmt.Println("marshalling payload")
 	if err != nil {
 		panic(err)
 	}
 
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(payload))
+	fmt.Println("init request")
+	fmt.Println(err)
 	if err != nil {
 		panic(err)
 	}
@@ -137,12 +158,18 @@ func placeOrderSimple(config *AppConfig, customerId int) int {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
+	fmt.Println("Before do request")
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
+	fmt.Println("do request")
 	if err != nil {
 		panic(err)
 	}
 
+	defer resp.Body.Close()
+
+	fmt.Println("Response returned", resp.StatusCode)
 	return resp.StatusCode
 }
 
