@@ -16,7 +16,7 @@ export class AuthController {
   @HttpCode(200)
   @Get(':id')
   async getToken(@Param() param: IdParamDto): Promise<AccessTokenDto> {
-    let id = Number.parseInt(param.id);
+    const id = Number.parseInt(param.id);
     if (Number.isNaN(id)) {
       throw new UnauthorizedException('Invalid user ID');
     }
