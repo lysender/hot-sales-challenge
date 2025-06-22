@@ -1,6 +1,13 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  PrimaryColumn,
+} from 'typeorm';
 
 @Entity()
+@Index(['customerId', 'promotionId', 'productId'], { unique: true })
 export class Order {
   @PrimaryColumn()
   id: string;

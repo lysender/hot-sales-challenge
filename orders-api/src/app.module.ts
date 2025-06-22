@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
 import { PromotionsModule } from './promotions/promotions.module';
+import { TokensModule } from './tokens/tokens.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { PromotionsModule } from './promotions/promotions.module';
     PromotionsModule,
     OrdersModule,
     AuthModule,
+    TokensModule,
   ],
   controllers: [AppController],
   providers: [AppService],
