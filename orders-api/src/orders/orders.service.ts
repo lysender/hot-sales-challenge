@@ -1,14 +1,15 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Product } from 'src/inventory/product.entity';
+import { Inventory } from 'src/inventory/inventory.entity';
 import { Promotion } from 'src/promotions/promotion.entity';
 import { Nullable } from 'src/shared/nullable';
 import { TokensService } from 'src/tokens/tokens.service';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { v7 } from 'uuid';
 import { OrderTokenDataDto } from './dto/order-token-data.dto';
 import { OrderTokenDto } from './dto/order-token.dto';
@@ -25,13 +26,14 @@ export class OrdersService {
     @InjectRepository(Order)
     private ordersRepository: Repository<Order>,
 
-    @InjectRepository(Product)
-    private productsRepository: Repository<Product>,
+    @InjectRepository(Inventory)
+    private inventoryRepository: Repository<Inventory>,
 
     @InjectRepository(Promotion)
     private promotionsRepository: Repository<Promotion>,
 
     private tokensService: TokensService,
+    private dataSource: DataSource,
   ) {}
 
   findAll(): Promise<Order[]> {
@@ -51,9 +53,9 @@ export class OrdersService {
     payload: SubmitOrderDto,
   ): Promise<OrderTokenDto> {
     // Validate promotion and product
-    const [promotion, product, order] = await Promise.all([
+    const [promotion, inventory, order] = await Promise.all([
       this.promotionsRepository.findOneBy({ id: payload.promotionId }),
-      this.productsRepository.findOneBy({ id: payload.productId }),
+      this.inventoryRepository.findOneBy({ id: payload.productId }),
       this.ordersRepository.findOneBy({
         promotionId: payload.promotionId,
         productId: payload.productId,
@@ -64,7 +66,7 @@ export class OrdersService {
     if (!promotion) {
       throw new BadRequestException('Invalid promotion');
     }
-    if (!product) {
+    if (!inventory) {
       throw new BadRequestException('Invalid product');
     }
     if (order) {
@@ -86,6 +88,83 @@ export class OrdersService {
 
     const orderToken = this.tokensService.sign(tokenData, DEFAULT_EXPIRES_IN);
     return { orderToken };
+  }
+
+  async placeOrderSimple(
+    customerId: number,
+    payload: SubmitOrderDto,
+  ): Promise<Order> {
+    // Validate promotion
+    const [promotion, existingOrder] = await Promise.all([
+      this.promotionsRepository.findOneBy({ id: payload.promotionId }),
+      this.ordersRepository.findOneBy({
+        promotionId: payload.promotionId,
+        productId: payload.productId,
+        customerId,
+      }),
+    ]);
+
+    if (!promotion) {
+      throw new BadRequestException('Invalid promotion');
+    }
+    if (existingOrder) {
+      throw new BadRequestException('You already purchased this product');
+    }
+
+    const runner = this.dataSource.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction();
+
+    let error: Nullable<Error> = null;
+    let order: Nullable<Order> = null;
+
+    try {
+      // Validate inventory
+      const inventoryRepo = runner.manager.getRepository(Inventory);
+      const inventory = await inventoryRepo
+        .createQueryBuilder('inventory')
+        .setLock('pessimistic_write')
+        .where('inventory.id = :id', { id: payload.productId })
+        .getOne();
+
+      if (!inventory) {
+        throw new BadRequestException('Invalid product');
+      }
+      if (inventory.quantity <= 0) {
+        throw new ForbiddenException('Product is out of stock');
+      }
+
+      // Decrease inventory quantity
+      inventory.quantity = inventory.quantity - 1;
+      await inventoryRepo.save(inventory);
+
+      // Insert new order
+      const orderRepo = runner.manager.getRepository(Order);
+      order = orderRepo.create({
+        id: v7(),
+        customerId,
+        promotionId: payload.promotionId,
+        productId: payload.productId,
+        status: 'success',
+      });
+
+      await orderRepo.save(order);
+
+      await runner.commitTransaction();
+    } catch (err) {
+      error = err;
+    } finally {
+      await runner.release();
+    }
+
+    if (error) {
+      throw error;
+    }
+    if (order) {
+      return order;
+    }
+
+    throw new Error('Unhandled...');
   }
 
   async checkOrder(

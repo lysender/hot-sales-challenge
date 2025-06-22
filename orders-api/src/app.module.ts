@@ -30,6 +30,8 @@ import { TokensModule } from './tokens/tokens.module';
         database: configService.get('DB_NAME'),
         synchronize: false,
         autoLoadEntities: true,
+        logging:
+          process.env.LOG_QUERIES === '1' ? ['query', 'error', 'warn'] : [],
       }),
       inject: [ConfigService],
     }),
