@@ -62,8 +62,21 @@ func loadConfig() AppConfig {
 }
 
 func placeOrdersSimple(config *AppConfig) {
+	start := time.Now()
+
 	for i := range 10 {
 		placeOrderSimple(config, i+10000)
+	}
+
+	elapsed := time.Since(start)
+	printElapsed(elapsed)
+}
+
+func printElapsed(elapsed time.Duration) {
+	if elapsed >= 2*time.Second {
+		fmt.Printf("Duration: %s\n", elapsed.Round(time.Millisecond).String())
+	} else {
+		fmt.Printf("Duration: %d ms\n", elapsed.Milliseconds())
 	}
 }
 
