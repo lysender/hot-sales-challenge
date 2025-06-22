@@ -62,8 +62,29 @@ func loadConfig() AppConfig {
 	}
 }
 
+type CrawlResults struct {
+	mu       sync.Mutex
+	Statuses map[int]int
+}
+
+func (c *CrawlResults) Add(status int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_, ok := c.Statuses[status]
+	if !ok {
+		c.Statuses[status] = 1
+	} else {
+		c.Statuses[status] += 1
+	}
+}
+
 func placeOrdersSimple(config *AppConfig) {
 	start := time.Now()
+
+	result := CrawlResults{
+		Statuses: map[int]int{},
+	}
 
 	var wg sync.WaitGroup
 
@@ -71,7 +92,8 @@ func placeOrdersSimple(config *AppConfig) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			placeOrderSimple(config, i+10000)
+			status := placeOrderSimple(config, i+10000)
+			result.Add(status)
 		}()
 	}
 
@@ -79,6 +101,10 @@ func placeOrdersSimple(config *AppConfig) {
 
 	elapsed := time.Since(start)
 	printElapsed(elapsed)
+
+	for k, v := range result.Statuses {
+		fmt.Printf("Status: %d, count: %d", k, v)
+	}
 }
 
 func printElapsed(elapsed time.Duration) {
@@ -89,7 +115,7 @@ func printElapsed(elapsed time.Duration) {
 	}
 }
 
-func placeOrderSimple(config *AppConfig, customerId int) {
+func placeOrderSimple(config *AppConfig, customerId int) int {
 	token := generateToken(config, customerId)
 
 	endpoint := config.ApiUrl + "/orders/placeOrderSimple"
@@ -117,7 +143,7 @@ func placeOrderSimple(config *AppConfig, customerId int) {
 		panic(err)
 	}
 
-	fmt.Println("Status:", resp.Status)
+	return resp.StatusCode
 }
 
 func generateToken(config *AppConfig, customerId int) string {
