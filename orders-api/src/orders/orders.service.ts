@@ -58,7 +58,6 @@ export class OrdersService {
     customerId: number,
     payload: SubmitOrderDto,
   ): Promise<OrderTokenDto> {
-    console.log('start of place order');
     // Validate promotion and product
     const [promotion, inventory, order] = await Promise.all([
       this.promotionsRepository.findOneBy({ id: payload.promotionId }),
@@ -80,7 +79,6 @@ export class OrdersService {
       throw new BadRequestException('You already purchased this product');
     }
 
-    console.log('securing a slot');
     // Secure purchase order slot
     const key = `item:${payload.productId}`;
     const newQty = await this.redisService.decrQuantity(key);
@@ -118,10 +116,9 @@ export class OrdersService {
       const qtyRes = await runner.manager
         .createQueryBuilder()
         .update(Inventory)
-        .set({ quantity: () => 'quantity + 1' })
+        .set({ quantity: () => 'quantity - 1' })
         .where('id = :id AND quantity > 0', { id: payload.productId })
         .execute();
-      console.log(qtyRes);
 
       let qtyUpdated = false;
 
