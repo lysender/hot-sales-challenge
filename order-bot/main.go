@@ -22,6 +22,9 @@ type AppConfig struct {
 	PromotionId  string
 	ProductId    string
 	JwtSecretKey string
+	Strategy     string
+	Workers      int
+	TotalOrders  int
 }
 
 type SubmitOrderDto struct {
@@ -48,11 +51,27 @@ type PaginationMetaDto struct {
 
 func main() {
 	config := loadConfig()
-	placeOrdersSimple(&config)
+	switch config.Strategy {
+	case "simple":
+		placeOrdersSimple(&config)
+	case "fast":
+		placeOrdersFast(&config)
+	default:
+		panic("Invalid strategy")
+	}
 }
 
 func loadConfig() AppConfig {
 	err := godotenv.Load()
+	if err != nil {
+		panic(err)
+	}
+
+	workers, err := strconv.Atoi(os.Getenv("WORKERS"))
+	if err != nil {
+		panic(err)
+	}
+	totalOrders, err := strconv.Atoi(os.Getenv("TOTAL_ORDERS"))
 	if err != nil {
 		panic(err)
 	}
@@ -62,6 +81,9 @@ func loadConfig() AppConfig {
 		PromotionId:  os.Getenv("PROMOTION_ID"),
 		ProductId:    os.Getenv("PRODUCT_ID"),
 		JwtSecretKey: os.Getenv("JWT_SECRET_KEY"),
+		Strategy:     os.Getenv("STRATEGY"),
+		Workers:      workers,
+		TotalOrders:  totalOrders,
 	}
 }
 
@@ -91,7 +113,7 @@ func randomInt(min int, max int) int {
 	return min + rand.Intn(max-min)
 }
 
-func worker(id int, config *AppConfig, jobs <-chan Workload, results chan<- int) {
+func workerSimple(id int, config *AppConfig, jobs <-chan Workload, results chan<- int) {
 	fmt.Println("Worker", id)
 
 	for workload := range jobs {
@@ -100,7 +122,16 @@ func worker(id int, config *AppConfig, jobs <-chan Workload, results chan<- int)
 	}
 }
 
-func placeOrdersSimple(config *AppConfig) {
+func workerFast(id int, config *AppConfig, jobs <-chan Workload, results chan<- int) {
+	fmt.Println("Worker", id)
+
+	for workload := range jobs {
+		status := placeOrderFast(config, workload.Client, workload.Id)
+		results <- status
+	}
+}
+
+func placeOrdersFast(config *AppConfig) {
 	start := time.Now()
 
 	client := &http.Client{
@@ -114,17 +145,14 @@ func placeOrdersSimple(config *AppConfig) {
 		Statuses: map[int]int{},
 	}
 
-	const numWorkers = 10
-	const numJobs = 10000
+	jobs := make(chan Workload, config.TotalOrders*2)
+	results := make(chan int, config.TotalOrders*2)
 
-	jobs := make(chan Workload, numJobs*2)
-	results := make(chan int, numJobs*2)
-
-	for w := 1; w <= numWorkers; w++ {
-		go worker(w, config, jobs, results)
+	for w := 1; w <= config.Workers; w++ {
+		go workerFast(w, config, jobs, results)
 	}
 
-	for j := 1; j <= numJobs; j++ {
+	for j := 1; j <= config.TotalOrders; j++ {
 		// Regular job
 		customerId := j + 10000
 		jobs <- Workload{
@@ -132,7 +160,7 @@ func placeOrdersSimple(config *AppConfig) {
 			Client: client,
 		}
 		// Also send chaos
-		randCustomerId := randomInt(10000, 10000+numJobs-1)
+		randCustomerId := randomInt(10000, 10000+config.TotalOrders-1)
 		jobs <- Workload{
 			Id:     randCustomerId,
 			Client: client,
@@ -145,7 +173,7 @@ func placeOrdersSimple(config *AppConfig) {
 	slog.SetDefault(logger)
 
 	counter := 0
-	for a := 1; a <= numJobs*2; a++ {
+	for a := 1; a <= config.TotalOrders*2; a++ {
 		status := <-results
 		stats.Add(status)
 
@@ -164,7 +192,72 @@ func placeOrdersSimple(config *AppConfig) {
 	}
 
 	// Compute requests per second
-	rps := int((numJobs * 2) / elapsed.Seconds())
+	rps := int((float64(config.TotalOrders) * 2) / elapsed.Seconds())
+	fmt.Println("RPS:", rps)
+}
+
+func placeOrdersSimple(config *AppConfig) {
+	start := time.Now()
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 20,
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	stats := CrawlResults{
+		Statuses: map[int]int{},
+	}
+
+	jobs := make(chan Workload, config.TotalOrders*2)
+	results := make(chan int, config.TotalOrders*2)
+
+	for w := 1; w <= config.Workers; w++ {
+		go workerSimple(w, config, jobs, results)
+	}
+
+	for j := 1; j <= config.TotalOrders; j++ {
+		// Regular job
+		customerId := j + 10000
+		jobs <- Workload{
+			Id:     customerId,
+			Client: client,
+		}
+		// Also send chaos
+		randCustomerId := randomInt(10000, 10000+config.TotalOrders-1)
+		jobs <- Workload{
+			Id:     randCustomerId,
+			Client: client,
+		}
+	}
+
+	close(jobs)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	counter := 0
+	for a := 1; a <= config.TotalOrders*2; a++ {
+		status := <-results
+		stats.Add(status)
+
+		if counter%100 == 0 {
+			slog.Info("Processed a batch")
+		}
+
+		counter += 1
+	}
+
+	elapsed := time.Since(start)
+	printElapsed(elapsed)
+
+	for k, v := range stats.Statuses {
+		fmt.Printf("Status: %d, count: %d\n", k, v)
+	}
+
+	// Compute requests per second
+	rps := int((float64(config.TotalOrders) * 2) / elapsed.Seconds())
 	fmt.Println("RPS:", rps)
 }
 
@@ -174,6 +267,40 @@ func printElapsed(elapsed time.Duration) {
 	} else {
 		fmt.Printf("Duration: %d ms\n", elapsed.Milliseconds())
 	}
+}
+
+func placeOrderFast(config *AppConfig, client *http.Client, customerId int) int {
+	token := generateToken(config, customerId)
+
+	endpoint := config.ApiUrl + "/orders/placeOrder"
+
+	data := map[string]string{
+		"promotionId": config.PromotionId,
+		"productId":   config.ProductId,
+	}
+	payload, err := json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(payload))
+	if err != nil {
+		panic(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+
+	// Discard the body to allow reuse of http client
+	io.Copy(io.Discard, resp.Body) // equivalent to `cp body /dev/null`
+	resp.Body.Close()
+
+	return resp.StatusCode
 }
 
 func placeOrderSimple(config *AppConfig, client *http.Client, customerId int) int {
