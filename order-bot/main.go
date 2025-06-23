@@ -132,7 +132,7 @@ func placeOrdersSimple(config *AppConfig) {
 			Client: client,
 		}
 		// Also send chaos
-		randCustomerId := randomInt(10000, 10000+numJobs)
+		randCustomerId := randomInt(10000, 10000+numJobs-1)
 		jobs <- Workload{
 			Id:     randCustomerId,
 			Client: client,
@@ -162,6 +162,10 @@ func placeOrdersSimple(config *AppConfig) {
 	for k, v := range stats.Statuses {
 		fmt.Printf("Status: %d, count: %d\n", k, v)
 	}
+
+	// Compute requests per second
+	rps := int((numJobs * 2) / elapsed.Seconds())
+	fmt.Println("RPS:", rps)
 }
 
 func printElapsed(elapsed time.Duration) {
