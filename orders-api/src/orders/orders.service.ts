@@ -152,6 +152,7 @@ export class OrdersService {
 
       await runner.commitTransaction();
     } catch (err) {
+      await runner.rollbackTransaction();
       error = err;
     } finally {
       await runner.release();

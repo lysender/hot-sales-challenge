@@ -94,24 +94,27 @@ func placeOrdersSimple(config *AppConfig) {
 	var wg sync.WaitGroup
 
 	// Simple inserts
-	for i := range 10 {
+	max := 100
+	start_id := 10000
+
+	for i := range max {
 		wg.Add(1)
 
 		// A regular entry
 		go func(x int) {
 			defer wg.Done()
-			status := placeOrderSimple(config, x+10000)
+			status := placeOrderSimple(config, x+start_id)
 			result.Add(status)
 		}(i)
 
 		// Chaotic entry
-		// wg.Add(1)
-		// go func() {
-		// 	defer wg.Done()
-		// 	id := randomInt(10000, 10100)
-		// 	status := placeOrderSimple(config, id)
-		// 	result.Add(status)
-		// }()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			id := randomInt(10000, 10100)
+			status := placeOrderSimple(config, id)
+			result.Add(status)
+		}()
 	}
 
 	wg.Wait()
@@ -133,7 +136,6 @@ func printElapsed(elapsed time.Duration) {
 }
 
 func placeOrderSimple(config *AppConfig, customerId int) int {
-	fmt.Println("Sending POST request for", customerId)
 	token := generateToken(config, customerId)
 
 	endpoint := config.ApiUrl + "/orders/placeOrderSimple"
@@ -143,14 +145,11 @@ func placeOrderSimple(config *AppConfig, customerId int) int {
 		"productId":   config.ProductId,
 	}
 	payload, err := json.Marshal(data)
-	fmt.Println("marshalling payload")
 	if err != nil {
 		panic(err)
 	}
 
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(payload))
-	fmt.Println("init request")
-	fmt.Println(err)
 	if err != nil {
 		panic(err)
 	}
@@ -158,16 +157,22 @@ func placeOrderSimple(config *AppConfig, customerId int) int {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	fmt.Println("Before do request")
-
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
 	resp, err := client.Do(req)
-	fmt.Println("do request")
 	if err != nil {
 		panic(err)
 	}
 
 	defer resp.Body.Close()
+
+	// b, err := io.ReadAll(resp.Body)
+	// if err != nil {
+	// 	slog.Error(err.Error())
+	// 	return 500
+	// }
+	// fmt.Println(string(b))
 
 	fmt.Println("Response returned", resp.StatusCode)
 	return resp.StatusCode

@@ -1,0 +1,4 @@
+api_url = ""
+promotion_id = ""
+product_id = ""
+jwt_secret = ""
