@@ -10,6 +10,7 @@ import { InventoryModule } from './inventory/inventory.module';
 import { OrdersModule } from './orders/orders.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { TokensModule } from './tokens/tokens.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { TokensModule } from './tokens/tokens.module';
     OrdersModule,
     AuthModule,
     TokensModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],

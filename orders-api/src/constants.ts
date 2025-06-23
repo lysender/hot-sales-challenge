@@ -5,3 +5,4 @@ export const MAILGUN_DOMAIN = 'MAILGUN_DOMAIN';
 export const MAILGUN_SENDER = 'MAILGUN_SENDER';
 
 export const LANDING_URL = 'LANDING_URL';
+export const REDIS_URL = 'REDIS_URL';

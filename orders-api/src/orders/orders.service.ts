@@ -73,7 +73,6 @@ export class OrdersService {
       throw new BadRequestException('You already purchased this product');
     }
 
-    // Validate if user already has an existing order
     // Secure purchase order slot
     const orderId = v7();
     // Send to queue
