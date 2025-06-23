@@ -49,6 +49,11 @@ type PaginationMetaDto struct {
 	TotalPages   int `json:"totalPages"`
 }
 
+type InventoryItemDto struct {
+	Id       string `json:"id"`
+	Quantity int    `json:"quantity"`
+}
+
 func main() {
 	config := loadConfig()
 	switch config.Strategy {
@@ -182,6 +187,14 @@ func placeOrdersFast(config *AppConfig) {
 		}
 
 		counter += 1
+	}
+
+	// Check if all items are processed
+	for {
+		done := isDone(config, client)
+		if done {
+			break
+		}
 	}
 
 	elapsed := time.Since(start)
@@ -335,6 +348,54 @@ func placeOrderSimple(config *AppConfig, client *http.Client, customerId int) in
 	resp.Body.Close()
 
 	return resp.StatusCode
+}
+
+func isDone(config *AppConfig, client *http.Client) bool {
+	items := checkInventory(config, client)
+	if len(items) == 1 {
+		qty := items[0].Quantity
+		if config.TotalOrders == 10000-qty {
+			return true
+		}
+	}
+
+	return false
+}
+
+func checkInventory(config *AppConfig, client *http.Client) []InventoryItemDto {
+	token := generateToken(config, 10001)
+	endpoint := config.ApiUrl + "/inventory"
+
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		panic("Should be able to view inventory")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	var items []InventoryItemDto
+	err = json.Unmarshal(body, &items)
+	if err != nil {
+		panic(err)
+	}
+	return items
 }
 
 func generateToken(config *AppConfig, customerId int) string {
