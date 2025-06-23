@@ -25,6 +25,7 @@
     "migration:revert": "npm run typeorm migration:revert -- -d custom-data-source.ts"
   },
   "dependencies": {
+    "@nestjs/bullmq": "^11.0.2",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
@@ -36,6 +37,7 @@
     "@nestjs/typeorm": "^11.0.0",
     "@redis/client": "^1.6.1",
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.56.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "jsonwebtoken": "^9.0.2",

@@ -1,3 +1,4 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
   ForbiddenException,
@@ -5,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { Queue } from 'bullmq';
 import { Inventory } from 'src/inventory/inventory.entity';
 import { Promotion } from 'src/promotions/promotion.entity';
 import { RedisService } from 'src/redis/redis.service';
@@ -33,6 +35,8 @@ export class OrdersService {
     @InjectRepository(Promotion)
     private promotionsRepository: Repository<Promotion>,
 
+    @InjectQueue('orders') private ordersQueue: Queue,
+
     private tokensService: TokensService,
     private redisService: RedisService,
     private dataSource: DataSource,
@@ -54,6 +58,7 @@ export class OrdersService {
     customerId: number,
     payload: SubmitOrderDto,
   ): Promise<OrderTokenDto> {
+    console.log('start of place order');
     // Validate promotion and product
     const [promotion, inventory, order] = await Promise.all([
       this.promotionsRepository.findOneBy({ id: payload.promotionId }),
@@ -75,6 +80,7 @@ export class OrdersService {
       throw new BadRequestException('You already purchased this product');
     }
 
+    console.log('securing a slot');
     // Secure purchase order slot
     const key = `item:${payload.productId}`;
     const newQty = await this.redisService.decrQuantity(key);
@@ -92,6 +98,8 @@ export class OrdersService {
       productId: payload.productId,
       status: 'pending',
     };
+
+    await this.ordersQueue.add('placeOrder', tokenData);
 
     const orderToken = this.tokensService.sign(tokenData, DEFAULT_EXPIRES_IN);
     return { orderToken };
