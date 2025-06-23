@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Inventory } from 'src/inventory/inventory.entity';
 import { Promotion } from 'src/promotions/promotion.entity';
+import { RedisService } from 'src/redis/redis.service';
 import { Nullable } from 'src/shared/nullable';
 import { TokensService } from 'src/tokens/tokens.service';
 import { DataSource, Repository } from 'typeorm';
@@ -33,6 +34,7 @@ export class OrdersService {
     private promotionsRepository: Repository<Promotion>,
 
     private tokensService: TokensService,
+    private redisService: RedisService,
     private dataSource: DataSource,
   ) {}
 
@@ -74,6 +76,12 @@ export class OrdersService {
     }
 
     // Secure purchase order slot
+    const key = `item:${payload.productId}`;
+    const newQty = await this.redisService.decrQuantity(key);
+    if (newQty < 0) {
+      throw new ForbiddenException('Product is already out of stock');
+    }
+
     const orderId = v7();
     // Send to queue
     // Return order token
@@ -87,6 +95,64 @@ export class OrdersService {
 
     const orderToken = this.tokensService.sign(tokenData, DEFAULT_EXPIRES_IN);
     return { orderToken };
+  }
+
+  async processOrder(payload: OrderTokenDataDto): Promise<Order> {
+    const runner = this.dataSource.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction();
+
+    let error: Nullable<Error> = null;
+    let order: Nullable<Order> = null;
+
+    try {
+      // Validate inventory
+      const qtyRes = await runner.manager
+        .createQueryBuilder()
+        .update(Inventory)
+        .set({ quantity: () => 'quantity + 1' })
+        .where('id = :id AND quantity > 0', { id: payload.productId })
+        .execute();
+      console.log(qtyRes);
+
+      let qtyUpdated = false;
+
+      if (qtyRes.affected && qtyRes.affected > 0) {
+        qtyUpdated = true;
+      }
+
+      if (!qtyUpdated) {
+        throw new ForbiddenException('Product is out of stock');
+      }
+
+      // Insert new order
+      const orderRepo = runner.manager.getRepository(Order);
+      order = orderRepo.create({
+        id: payload.sub,
+        customerId: payload.customerId,
+        promotionId: payload.promotionId,
+        productId: payload.productId,
+        status: 'success',
+      });
+
+      await orderRepo.save(order);
+
+      await runner.commitTransaction();
+    } catch (err) {
+      await runner.rollbackTransaction();
+      error = err;
+    } finally {
+      await runner.release();
+    }
+
+    if (error) {
+      throw error;
+    }
+    if (order) {
+      return order;
+    }
+
+    throw new Error('Unhandled...');
   }
 
   async placeOrderSimple(
@@ -182,7 +248,6 @@ export class OrdersService {
 
     // Check if the order is already placed
     const order = await this.ordersRepository.findOneBy({ id: data.sub });
-    console.log(order);
 
     if (order) {
       data.status = order.status as OrderStatus;

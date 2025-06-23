@@ -13,8 +13,8 @@ export class InitialSeeds1750512114533 implements MigrationInterface {
     await queryRunner.query(
       `INSERT INTO inventory (id, quantity)
         VALUES
-          ('019792ae-89fe-7795-8740-7df8c228e633', 50000),
-          ('019792ae-e6eb-737f-96aa-51acc3114bc4', 50000)`,
+          ('019792ae-89fe-7795-8740-7df8c228e633', 10000),
+          ('019792ae-e6eb-737f-96aa-51acc3114bc4', 10000)`,
     );
 
     await queryRunner.query(

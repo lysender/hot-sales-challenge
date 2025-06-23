@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RedisService } from 'src/redis/redis.service';
 import { Nullable } from 'src/shared/nullable';
@@ -51,5 +51,23 @@ export class InventoryService {
     }
 
     return cachedItems;
+  }
+
+  async getCachedInventory(id: string): Promise<CachedInventoryDto> {
+    const key = `item:${id}`;
+    const res = await this.redisService.getValue(key);
+    if (res) {
+      return {
+        id,
+        quantity: res,
+      };
+    }
+    throw new NotFoundException('Cached inventory not found');
+  }
+
+  async decrCachedInventory(id: string) {
+    const key = `item:${id}`;
+    const res = await this.redisService.decrQuantity(key);
+    console.log(res);
   }
 }

@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumberString } from 'class-validator';
+import { IsNotEmpty } from 'class-validator';
 
 export class IdParamDto {
   @ApiProperty()
-  @IsNumberString()
+  @IsNotEmpty()
   id: string;
 }

@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from 'redis';
 import { REDIS_URL } from 'src/constants';
@@ -55,5 +60,19 @@ export class RedisService implements OnModuleInit {
       }
     }
     return null;
+  }
+
+  async decrQuantity(key: string): Promise<number> {
+    if (this.ready) {
+      return await this.client.decr(key);
+    }
+    throw new ServiceUnavailableException('Redis service not ready');
+  }
+
+  async incrQuantity(key: string): Promise<number> {
+    if (this.ready) {
+      return await this.client.incr(key);
+    }
+    throw new ServiceUnavailableException('Redis service not ready');
   }
 }
