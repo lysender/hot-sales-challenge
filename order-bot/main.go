@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -82,19 +83,19 @@ func (c *CrawlResults) Add(status int) {
 }
 
 type Workload struct {
-	Id    int
-	Chaos bool
+	Id     int
+	Client *http.Client
 }
 
 func randomInt(min int, max int) int {
 	return min + rand.Intn(max-min)
 }
 
-func worker(id int, config *AppConfig, jobs <-chan int, results chan<- int) {
+func worker(id int, config *AppConfig, jobs <-chan Workload, results chan<- int) {
 	fmt.Println("Worker", id)
 
-	for customerId := range jobs {
-		status := placeOrderSimple(config, customerId)
+	for workload := range jobs {
+		status := placeOrderSimple(config, workload.Client, workload.Id)
 		results <- status
 	}
 }
@@ -102,14 +103,21 @@ func worker(id int, config *AppConfig, jobs <-chan int, results chan<- int) {
 func placeOrdersSimple(config *AppConfig) {
 	start := time.Now()
 
+	client := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 20,
+		},
+		Timeout: 5 * time.Second,
+	}
+
 	stats := CrawlResults{
 		Statuses: map[int]int{},
 	}
 
 	const numWorkers = 10
-	const numJobs = 1000
+	const numJobs = 10000
 
-	jobs := make(chan int, numJobs*2)
+	jobs := make(chan Workload, numJobs*2)
 	results := make(chan int, numJobs*2)
 
 	for w := 1; w <= numWorkers; w++ {
@@ -119,10 +127,16 @@ func placeOrdersSimple(config *AppConfig) {
 	for j := 1; j <= numJobs; j++ {
 		// Regular job
 		customerId := j + 10000
-		jobs <- customerId
+		jobs <- Workload{
+			Id:     customerId,
+			Client: client,
+		}
 		// Also send chaos
 		randCustomerId := randomInt(10000, 10000+numJobs)
-		jobs <- randCustomerId
+		jobs <- Workload{
+			Id:     randCustomerId,
+			Client: client,
+		}
 	}
 
 	close(jobs)
@@ -158,7 +172,7 @@ func printElapsed(elapsed time.Duration) {
 	}
 }
 
-func placeOrderSimple(config *AppConfig, customerId int) int {
+func placeOrderSimple(config *AppConfig, client *http.Client, customerId int) int {
 	token := generateToken(config, customerId)
 
 	endpoint := config.ApiUrl + "/orders/placeOrderSimple"
@@ -180,15 +194,14 @@ func placeOrderSimple(config *AppConfig, customerId int) int {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
 	resp, err := client.Do(req)
 	if err != nil {
 		panic(err)
 	}
 
-	defer resp.Body.Close()
+	// Discard the body to allow reuse of http client
+	io.Copy(io.Discard, resp.Body) // equivalent to `cp body /dev/null`
+	resp.Body.Close()
 
 	return resp.StatusCode
 }
