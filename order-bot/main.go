@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"os"
@@ -80,49 +81,71 @@ func (c *CrawlResults) Add(status int) {
 	}
 }
 
+type Workload struct {
+	Id    int
+	Chaos bool
+}
+
 func randomInt(min int, max int) int {
 	return min + rand.Intn(max-min)
+}
+
+func worker(id int, config *AppConfig, jobs <-chan int, results chan<- int) {
+	fmt.Println("Worker", id)
+
+	for customerId := range jobs {
+		status := placeOrderSimple(config, customerId)
+		results <- status
+	}
 }
 
 func placeOrdersSimple(config *AppConfig) {
 	start := time.Now()
 
-	result := CrawlResults{
+	stats := CrawlResults{
 		Statuses: map[int]int{},
 	}
 
-	var wg sync.WaitGroup
+	const numWorkers = 10
+	const numJobs = 1000
 
-	// Simple inserts
-	max := 100
-	start_id := 10000
+	jobs := make(chan int, numJobs*2)
+	results := make(chan int, numJobs*2)
 
-	for i := range max {
-		wg.Add(1)
-
-		// A regular entry
-		go func(x int) {
-			defer wg.Done()
-			status := placeOrderSimple(config, x+start_id)
-			result.Add(status)
-		}(i)
-
-		// Chaotic entry
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			id := randomInt(10000, 10100)
-			status := placeOrderSimple(config, id)
-			result.Add(status)
-		}()
+	for w := 1; w <= numWorkers; w++ {
+		go worker(w, config, jobs, results)
 	}
 
-	wg.Wait()
+	for j := 1; j <= numJobs; j++ {
+		// Regular job
+		customerId := j + 10000
+		jobs <- customerId
+		// Also send chaos
+		randCustomerId := randomInt(10000, 10000+numJobs)
+		jobs <- randCustomerId
+	}
+
+	close(jobs)
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	counter := 0
+	for a := 1; a <= numJobs*2; a++ {
+		status := <-results
+		stats.Add(status)
+
+		if counter%100 == 0 {
+			slog.Info("Processed a batch")
+		}
+
+		counter += 1
+	}
 
 	elapsed := time.Since(start)
 	printElapsed(elapsed)
 
-	for k, v := range result.Statuses {
+	for k, v := range stats.Statuses {
 		fmt.Printf("Status: %d, count: %d\n", k, v)
 	}
 }
@@ -167,14 +190,6 @@ func placeOrderSimple(config *AppConfig, customerId int) int {
 
 	defer resp.Body.Close()
 
-	// b, err := io.ReadAll(resp.Body)
-	// if err != nil {
-	// 	slog.Error(err.Error())
-	// 	return 500
-	// }
-	// fmt.Println(string(b))
-
-	fmt.Println("Response returned", resp.StatusCode)
 	return resp.StatusCode
 }
 
