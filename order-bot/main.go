@@ -22,7 +22,6 @@ type AppConfig struct {
 	PromotionId  string
 	ProductId    string
 	JwtSecretKey string
-	Strategy     string
 	Workers      int
 	TotalOrders  int
 }
@@ -56,14 +55,7 @@ type InventoryItemDto struct {
 
 func main() {
 	config := loadConfig()
-	switch config.Strategy {
-	case "simple":
-		placeOrdersSimple(&config)
-	case "fast":
-		placeOrdersFast(&config)
-	default:
-		panic("Invalid strategy")
-	}
+	placeOrdersSimple(&config)
 }
 
 func loadConfig() AppConfig {
@@ -86,7 +78,6 @@ func loadConfig() AppConfig {
 		PromotionId:  os.Getenv("PROMOTION_ID"),
 		ProductId:    os.Getenv("PRODUCT_ID"),
 		JwtSecretKey: os.Getenv("JWT_SECRET_KEY"),
-		Strategy:     os.Getenv("STRATEGY"),
 		Workers:      workers,
 		TotalOrders:  totalOrders,
 	}
@@ -125,88 +116,6 @@ func workerSimple(id int, config *AppConfig, jobs <-chan Workload, results chan<
 		status := placeOrderSimple(config, workload.Client, workload.Id)
 		results <- status
 	}
-}
-
-func workerFast(id int, config *AppConfig, jobs <-chan Workload, results chan<- int) {
-	fmt.Println("Worker", id)
-
-	for workload := range jobs {
-		status := placeOrderFast(config, workload.Client, workload.Id)
-		results <- status
-	}
-}
-
-func placeOrdersFast(config *AppConfig) {
-	start := time.Now()
-
-	client := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 20,
-		},
-		Timeout: 5 * time.Second,
-	}
-
-	stats := CrawlResults{
-		Statuses: map[int]int{},
-	}
-
-	jobs := make(chan Workload, config.TotalOrders*2)
-	results := make(chan int, config.TotalOrders*2)
-
-	for w := 1; w <= config.Workers; w++ {
-		go workerFast(w, config, jobs, results)
-	}
-
-	for j := 1; j <= config.TotalOrders; j++ {
-		// Regular job
-		customerId := j + 10000
-		jobs <- Workload{
-			Id:     customerId,
-			Client: client,
-		}
-		// Also send chaos
-		randCustomerId := randomInt(10000, 10000+config.TotalOrders-1)
-		jobs <- Workload{
-			Id:     randCustomerId,
-			Client: client,
-		}
-	}
-
-	close(jobs)
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-
-	counter := 0
-	for a := 1; a <= config.TotalOrders*2; a++ {
-		status := <-results
-		stats.Add(status)
-
-		if counter%100 == 0 {
-			slog.Info("Processed a batch")
-		}
-
-		counter += 1
-	}
-
-	// Check if all items are processed
-	for {
-		done := isDone(config, client)
-		if done {
-			break
-		}
-	}
-
-	elapsed := time.Since(start)
-	printElapsed(elapsed)
-
-	for k, v := range stats.Statuses {
-		fmt.Printf("Status: %d, count: %d\n", k, v)
-	}
-
-	// Compute requests per second
-	rps := int((float64(config.TotalOrders) * 2) / elapsed.Seconds())
-	fmt.Println("RPS:", rps)
 }
 
 func placeOrdersSimple(config *AppConfig) {
@@ -282,40 +191,6 @@ func printElapsed(elapsed time.Duration) {
 	}
 }
 
-func placeOrderFast(config *AppConfig, client *http.Client, customerId int) int {
-	token := generateToken(config, customerId)
-
-	endpoint := config.ApiUrl + "/orders/placeOrder"
-
-	data := map[string]string{
-		"promotionId": config.PromotionId,
-		"productId":   config.ProductId,
-	}
-	payload, err := json.Marshal(data)
-	if err != nil {
-		panic(err)
-	}
-
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(payload))
-	if err != nil {
-		panic(err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-
-	// Discard the body to allow reuse of http client
-	io.Copy(io.Discard, resp.Body) // equivalent to `cp body /dev/null`
-	resp.Body.Close()
-
-	return resp.StatusCode
-}
-
 func placeOrderSimple(config *AppConfig, client *http.Client, customerId int) int {
 	token := generateToken(config, customerId)
 
@@ -348,54 +223,6 @@ func placeOrderSimple(config *AppConfig, client *http.Client, customerId int) in
 	resp.Body.Close()
 
 	return resp.StatusCode
-}
-
-func isDone(config *AppConfig, client *http.Client) bool {
-	items := checkInventory(config, client)
-	if len(items) == 1 {
-		qty := items[0].Quantity
-		if config.TotalOrders == 10000-qty {
-			return true
-		}
-	}
-
-	return false
-}
-
-func checkInventory(config *AppConfig, client *http.Client) []InventoryItemDto {
-	token := generateToken(config, 10001)
-	endpoint := config.ApiUrl + "/inventory"
-
-	req, err := http.NewRequest("GET", endpoint, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		panic("Should be able to view inventory")
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	var items []InventoryItemDto
-	err = json.Unmarshal(body, &items)
-	if err != nil {
-		panic(err)
-	}
-	return items
 }
 
 func generateToken(config *AppConfig, customerId int) string {

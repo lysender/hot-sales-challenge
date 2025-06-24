@@ -2,8 +2,6 @@ import { Logger, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
-import { RedisModule } from 'src/redis/redis.module';
-import { RedisService } from 'src/redis/redis.service';
 import { InventoryController } from './inventory.controller';
 import { Inventory } from './inventory.entity';
 import { InventoryService } from './inventory.service';
@@ -14,11 +12,10 @@ import { ProductsService } from './products.service';
   imports: [
     TypeOrmModule.forFeature([Product, Inventory]),
     ConfigModule,
-    RedisModule,
     LoggerModule,
   ],
   exports: [TypeOrmModule],
   controllers: [InventoryController],
-  providers: [ProductsService, InventoryService, RedisService, Logger],
+  providers: [ProductsService, InventoryService, Logger],
 })
 export class InventoryModule {}
