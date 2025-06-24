@@ -1,0 +1,6 @@
+api_url = ""
+promotion_id = ""
+product_id = ""
+jwt_secret = ""
+workers = 10
+total_orders = 10000
