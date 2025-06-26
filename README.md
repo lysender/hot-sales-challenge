@@ -49,4 +49,36 @@ an order that is pending and gets processed in the background.
 
 The background worker will pick up the pending orders and process them.
 
+## Test Data
 
+- Quantity: 10k
+- Required successful orders: 10k
+- Duplicate/randomized orders: 10k
+- Total requests: 20k
+
+Note: There should be 10k successful requests and the rest can be either
+error 400 or error 500 due to unique constraints or transaction locking.
+
+## Testing clients
+
+Sample results using 10 workers.
+
+Go client (uses goroutine and channels)
+
+```
+Duration: 1m31.114s
+Status: 200, count: 10000
+Status: 400, count: 9989
+Status: 500, count: 10
+Status: 403, count: 1
+RPS: 219
+```
+
+Rust client (uses thread pool, non-async)
+```
+Duration: 99s
+Status: 500, count: 10
+Status: 200, count: 10000
+Status: 400, count: 9990
+RPS: 202
+```
